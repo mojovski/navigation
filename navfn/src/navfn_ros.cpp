@@ -368,7 +368,9 @@ namespace navfn {
 
     //create a message for the plan 
     nav_msgs::Path gui_path;
-    gui_path.poses.resize(path.size());
+    //Eugen: Apply subsampling
+    int max_path_size=800;
+
 
     if(!path.empty())
     {
@@ -377,8 +379,17 @@ namespace navfn {
     }
 
     // Extract the plan in world co-ordinates, we assume the path is all in the same frame
-    for(unsigned int i=0; i < path.size(); i++){
-      gui_path.poses[i] = path[i];
+    float step=1.0;
+    if (max_path_size>path.size())
+      step=path.size()/max_path_size;
+
+    int id=0;
+    float idf=0.0;
+    while(id<path.size()){
+    //for(unsigned int i=0; i < path.size(); i++){
+      gui_path.poses.push_back(path[id]);
+      idf=i*step;
+      id=int(idf);
     }
 
     plan_pub_.publish(gui_path);
