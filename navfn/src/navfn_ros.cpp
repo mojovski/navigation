@@ -39,7 +39,7 @@
 #include <tf/transform_listener.h>
 #include <costmap_2d/cost_values.h>
 #include <costmap_2d/costmap_2d.h>
-
+#include <string> 
 #include <pcl_conversions/pcl_conversions.h>
 
 //register this planner as a BaseGlobalPlanner plugin
@@ -370,6 +370,8 @@ namespace navfn {
     nav_msgs::Path gui_path;
     //Eugen: Apply subsampling
     int max_path_size=800;
+    int full_resolution_size=400; //number of samples close to the robot
+
 
 
     if(!path.empty())
@@ -379,16 +381,27 @@ namespace navfn {
     }
 
     // Extract the plan in world co-ordinates, we assume the path is all in the same frame
-    float step=1.0;
-    if (max_path_size>path.size())
-      step=path.size()/max_path_size;
+    float step_coarse=1.0;
+    if (max_path_size<path.size())
+    {
+      ROS_WARN_STREAM("Reducing the number of global path samples from " << path.size()
+        << " to " << max_path_size);
+      step_coarse=(path.size()-full_resolution_size)/(max_path_size-full_resolution_size);
+    }
+
+    float step_highres=1.0; //density close to robot. use full resolution. reduce it for areas far away.
 
     int id=0;
     float idf=0.0;
     while(id<path.size()){
     //for(unsigned int i=0; i < path.size(); i++){
       gui_path.poses.push_back(path[id]);
-      idf=i*step;
+      //update the next id
+      if (gui_path.poses.size()<full_resolution_size)
+        idf+=step_highres;
+      else
+        idf+=+step_coarse;
+
       id=int(idf);
     }
 
