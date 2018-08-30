@@ -163,6 +163,9 @@ unsigned char StaticLayer::interpretValue(unsigned char value)
 
 void StaticLayer::incomingMap(const nav_msgs::OccupancyGridConstPtr& new_map)
 {
+  //layered_costmap_->getCostmap()->getMutex()->lock();
+  boost::unique_lock<costmap_2d::Costmap2D::mutex_t> lock(*(layered_costmap_->getCostmap()->getMutex()));
+
   unsigned int size_x = new_map->info.width, size_y = new_map->info.height;
 
   ROS_DEBUG("Received a %d X %d map at %f m/pix", size_x, size_y, new_map->info.resolution);
@@ -219,6 +222,9 @@ void StaticLayer::incomingMap(const nav_msgs::OccupancyGridConstPtr& new_map)
     ROS_INFO("Shutting down the map subscriber. first_map_only flag is on");
     map_sub_.shutdown();
   }
+  //Added by eugen
+  //getMutex()->unlock();
+  layered_costmap_->updateMap(0,0,0);
 }
 
 void StaticLayer::incomingUpdate(const map_msgs::OccupancyGridUpdateConstPtr& update)
