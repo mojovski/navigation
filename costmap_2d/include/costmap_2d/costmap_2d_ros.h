@@ -47,7 +47,9 @@
 #include <geometry_msgs/PolygonStamped.h>
 #include <dynamic_reconfigure/server.h>
 #include <pluginlib/class_loader.h>
+#include <costmap_2d/execution_timer.h>
 
+#define MEASURE_TIME(fcn_name, msg)
 class SuperValue : public XmlRpc::XmlRpcValue
 {
 public:
