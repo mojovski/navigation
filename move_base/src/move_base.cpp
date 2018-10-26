@@ -55,6 +55,7 @@ namespace move_base {
     planner_plan_(NULL), latest_plan_(NULL), controller_plan_(NULL),
     runPlanner_(false), setup_(false), p_freq_change_(false), c_freq_change_(false), new_global_plan_(false) {
 
+    ROS_INFO("Initializeing the MoveBaseActionServer");
     as_ = new MoveBaseActionServer(ros::NodeHandle(), "move_base", boost::bind(&MoveBase::executeCb, this, _1), false);
 
     ros::NodeHandle private_nh("~");
@@ -114,6 +115,7 @@ namespace move_base {
 
     //initialize the global planner
     try {
+      ROS_INFO("Initializeing the global planner");
       planner_ = bgp_loader_.createInstance(global_planner);
       planner_->initialize(bgp_loader_.getName(global_planner), planner_costmap_ros_);
     } catch (const pluginlib::PluginlibException& ex) {
@@ -127,6 +129,7 @@ namespace move_base {
 
     //create a local planner
     try {
+      ROS_INFO("Initializeing the local planner");
       tc_ = blp_loader_.createInstance(local_planner);
       ROS_INFO("Created local_planner %s", local_planner.c_str());
       tc_->initialize(blp_loader_.getName(local_planner), &tf_, controller_costmap_ros_);
@@ -136,6 +139,7 @@ namespace move_base {
     }
 
     // Start actively updating costmaps based on sensor data
+    ROS_INFO("Start actively updating costmaps based on sensor data");
     planner_costmap_ros_->start();
     controller_costmap_ros_->start();
 
@@ -147,6 +151,7 @@ namespace move_base {
 
     //if we shutdown our costmaps when we're deactivated... we'll do that now
     if(shutdown_costmaps_){
+      ROS_INFO_NAMED("move_base","Stopping costmaps initially");
       ROS_DEBUG_NAMED("move_base","Stopping costmaps initially");
       planner_costmap_ros_->stop();
       controller_costmap_ros_->stop();
@@ -154,6 +159,7 @@ namespace move_base {
 
     //load any user specified recovery behaviors, and if that fails load the defaults
     if(!loadRecoveryBehaviors(private_nh)){
+      ROS_DEBUG_NAMED("move_base","Calling loadDefaultRecoveryBehaviors");
       loadDefaultRecoveryBehaviors();
     }
 
@@ -164,11 +170,13 @@ namespace move_base {
     recovery_index_ = 0;
 
     //we're all set up now so we can start the action server
+    ROS_INFO("we're all set up now so we can start the action server");
     as_->start();
 
     dsrv_ = new dynamic_reconfigure::Server<move_base::MoveBaseConfig>(ros::NodeHandle("~"));
     dynamic_reconfigure::Server<move_base::MoveBaseConfig>::CallbackType cb = boost::bind(&MoveBase::reconfigureCB, this, _1, _2);
     dsrv_->setCallback(cb);
+    ROS_INFO("Initializatino complete!");
   }
 
   void MoveBase::reconfigureCB(move_base::MoveBaseConfig &config, uint32_t level){
