@@ -58,6 +58,8 @@ namespace move_base {
     runPlanner_(false), setup_(false), p_freq_change_(false), c_freq_change_(false), new_global_plan_(false) {
 
     as_ = new MoveBaseActionServer(ros::NodeHandle(), "move_base", boost::bind(&MoveBase::executeCb, this, _1), false);
+    ROS_INFO("Initialized the move_base ActionServer");
+
 
     ros::NodeHandle private_nh("~");
     ros::NodeHandle nh;
@@ -116,12 +118,14 @@ namespace move_base {
 
     //initialize the global planner
     try {
+      ROS_INFO("Initializing the global planner...");
       planner_ = bgp_loader_.createInstance(global_planner);
       planner_->initialize(bgp_loader_.getName(global_planner), planner_costmap_ros_);
     } catch (const pluginlib::PluginlibException& ex) {
       ROS_FATAL("Failed to create the %s planner, are you sure it is properly registered and that the containing library is built? Exception: %s", global_planner.c_str(), ex.what());
       exit(1);
     }
+    ROS_INFO("Done");
 
     //create the ros wrapper for the controller's costmap... and initializer a pointer we'll use with the underlying map
     controller_costmap_ros_ = new costmap_2d::Costmap2DROS("local_costmap", tf_);
@@ -129,6 +133,7 @@ namespace move_base {
 
     //create a local planner
     try {
+      ROS_INFO("Initializing the local planner...");
       tc_ = blp_loader_.createInstance(local_planner);
       ROS_INFO("Created local_planner %s", local_planner.c_str());
       tc_->initialize(blp_loader_.getName(local_planner), &tf_, controller_costmap_ros_);
@@ -136,6 +141,7 @@ namespace move_base {
       ROS_FATAL("Failed to create the %s planner, are you sure it is properly registered and that the containing library is built? Exception: %s", local_planner.c_str(), ex.what());
       exit(1);
     }
+    ROS_INFO("Done");
 
     // Start actively updating costmaps based on sensor data
     planner_costmap_ros_->start();
@@ -149,6 +155,7 @@ namespace move_base {
 
     //if we shutdown our costmaps when we're deactivated... we'll do that now
     if(shutdown_costmaps_){
+      ROS_INFO_NAMED("move_base","Stopping costmaps initially");
       ROS_DEBUG_NAMED("move_base","Stopping costmaps initially");
       planner_costmap_ros_->stop();
       controller_costmap_ros_->stop();
@@ -156,8 +163,10 @@ namespace move_base {
 
     //load any user specified recovery behaviors, and if that fails load the defaults
     if(!loadRecoveryBehaviors(private_nh)){
+      ROS_INFO("calling loadDefaultRecoveryBehaviors...");
       loadDefaultRecoveryBehaviors();
     }
+    ROS_INFO("Done.");
 
     //initially, we'll need to make a plan
     state_ = PLANNING;
@@ -166,7 +175,9 @@ namespace move_base {
     recovery_index_ = 0;
 
     //we're all set up now so we can start the action server
+    ROS_INFO("Starting the move_base action server");
     as_->start();
+    ROS_INFO("Done.");
 
     dsrv_ = new dynamic_reconfigure::Server<move_base::MoveBaseConfig>(ros::NodeHandle("~"));
     dynamic_reconfigure::Server<move_base::MoveBaseConfig>::CallbackType cb = boost::bind(&MoveBase::reconfigureCB, this, _1, _2);
