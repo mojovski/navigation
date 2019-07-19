@@ -55,6 +55,7 @@ public:
                   << std::endl;
         //std::cout << strStream.str() << std::endl;
         ROS_DEBUG(strStream.str().c_str());
+        track_until_descruction=false; //dont print on destructor
     }
 
 }; // ExecutionTimer

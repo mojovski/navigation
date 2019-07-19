@@ -369,8 +369,8 @@ namespace navfn {
     //create a message for the plan 
     nav_msgs::Path gui_path;
     //Eugen: Apply subsampling
-    int max_path_size=800;
-    int full_resolution_size=400; //number of samples close to the robot
+    int max_path_size=400;
+    int full_resolution_size=max_path_size/2; //number of samples close to the robot
 
 
 

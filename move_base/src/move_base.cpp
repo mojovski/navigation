@@ -377,7 +377,7 @@ namespace move_base {
     //first try to make a plan to the exact desired goal
     std::vector<geometry_msgs::PoseStamped> global_plan;
     if(!planner_->makePlan(start, req.goal, global_plan) || global_plan.empty()){
-      ROS_DEBUG_NAMED("move_base","Failed to find a plan to exact goal of (%.2f, %.2f), searching for a feasible goal within tolerance", 
+      ROS_WARN_NAMED("move_base","Failed to find a plan to exact goal of (%.2f, %.2f), searching for a feasible goal within tolerance", 
           req.goal.pose.position.x, req.goal.pose.position.y);
 
       //search outwards for a feasible goal within the specified tolerance
@@ -466,7 +466,8 @@ namespace move_base {
 
   bool MoveBase::makePlan(const geometry_msgs::PoseStamped& goal, std::vector<geometry_msgs::PoseStamped>& plan){
     boost::unique_lock<costmap_2d::Costmap2D::mutex_t> lock(*(planner_costmap_ros_->getCostmap()->getMutex()));
-
+    int costmap_size=planner_costmap_ros_->getCostmap()->getSizeInCellsX()+planner_costmap_ros_->getCostmap()->getSizeInCellsY();
+    ROS_INFO_STREAM("Preparing global planning. Costmap size: " << costmap_size);
     //make sure to set the plan to be empty initially
     plan.clear();
 
@@ -762,7 +763,11 @@ namespace move_base {
       ros::WallTime start = ros::WallTime::now();
 
       //the real work on pursuing a goal is done here
-      bool done = executeCycle(goal, global_plan);
+      bool done=true;
+      {
+          ExecutionTimer<std::chrono::milliseconds> timer("move_base: executeCycle control cycle");
+          done = executeCycle(goal, global_plan);
+      }
 
       //if we're done, then we'll return from execute
       if(done)
@@ -796,7 +801,11 @@ namespace move_base {
   }
 
   bool MoveBase::executeCycle(geometry_msgs::PoseStamped& goal, std::vector<geometry_msgs::PoseStamped>& global_plan){
+    
+    ExecutionTimer<std::chrono::milliseconds> timer_mutex_ecl("timer_mutex_ecl");
     boost::recursive_mutex::scoped_lock ecl(configuration_mutex_);
+    timer_mutex_ecl.stop();
+
     //we need to be able to publish velocity commands
     geometry_msgs::Twist cmd_vel;
 
@@ -809,7 +818,11 @@ namespace move_base {
     //push the feedback out
     move_base_msgs::MoveBaseFeedback feedback;
     feedback.base_position = current_position;
-    as_->publishFeedback(feedback);
+    {
+      ExecutionTimer<std::chrono::milliseconds> timer("as_->publishFeedback(feedback)");
+      as_->publishFeedback(feedback);
+    }
+    
 
     //check to see if we've moved far enough to reset our oscillation timeout
     if(distance(current_position, oscillation_pose_) >= oscillation_distance_)
@@ -869,9 +882,16 @@ namespace move_base {
       //if we are in a planning state, then we'll attempt to make a plan
       case PLANNING:
         {
+          ExecutionTimer<std::chrono::milliseconds> timer_planner_mutex_("planner_mutex_");
           boost::recursive_mutex::scoped_lock lock(planner_mutex_);
+          timer_planner_mutex_.stop();
+
           runPlanner_ = true;
-          planner_cond_.notify_one();
+          {
+            ExecutionTimer<std::chrono::milliseconds> timer_planner_mutex_("planner_cond_.notify_one()");
+            planner_cond_.notify_one();
+          }
+          
         }
         ROS_DEBUG_NAMED("move_base","Waiting for plan, in the planning state.");
         break;
@@ -898,6 +918,7 @@ namespace move_base {
         if(oscillation_timeout_ > 0.0 &&
             last_oscillation_reset_ + ros::Duration(oscillation_timeout_) < ros::Time::now())
         {
+          ROS_DEBUG_NAMED("move_base", "Publishing zero vel due to oscillation timeout.");
           publishZeroVelocity();
           state_ = CLEARING;
           recovery_trigger_ = OSCILLATION_R;
@@ -946,17 +967,17 @@ namespace move_base {
 
       //we'll try to clear out space with any user-provided recovery behaviors
       case CLEARING:
-        ROS_DEBUG_NAMED("move_base","In clearing/recovery state");
+        ROS_INFO_NAMED("move_base","In clearing/recovery state");
         //we'll invoke whatever recovery behavior we're currently on if they're enabled
         if(recovery_behavior_enabled_ && recovery_index_ < recovery_behaviors_.size()){
-          ROS_DEBUG_NAMED("move_base_recovery","Executing behavior %u of %zu", recovery_index_, recovery_behaviors_.size());
+          ROS_INFO_NAMED("move_base_recovery","Executing behavior %u of %zu", recovery_index_, recovery_behaviors_.size());
           recovery_behaviors_[recovery_index_]->runBehavior();
 
           //we at least want to give the robot some time to stop oscillating after executing the behavior
           last_oscillation_reset_ = ros::Time::now();
 
           //we'll check if the recovery behavior actually worked
-          ROS_DEBUG_NAMED("move_base_recovery","Going back to planning state");
+          ROS_INFO_NAMED("move_base_recovery","Going back to planning state");
           last_valid_plan_ = ros::Time::now();
           planning_retries_ = 0;
           state_ = PLANNING;
@@ -965,13 +986,13 @@ namespace move_base {
           recovery_index_++;
         }
         else{
-          ROS_DEBUG_NAMED("move_base_recovery","All recovery behaviors have failed, locking the planner and disabling it.");
+          ROS_INFO_NAMED("move_base_recovery","All recovery behaviors have failed, locking the planner and disabling it.");
           //disable the planner thread
           boost::unique_lock<boost::recursive_mutex> lock(planner_mutex_);
           runPlanner_ = false;
           lock.unlock();
 
-          ROS_DEBUG_NAMED("move_base_recovery","Something should abort after this.");
+          ROS_INFO_NAMED("move_base_recovery","Something should abort after this.");
 
           if(recovery_trigger_ == CONTROLLING_R){
             ROS_ERROR("Aborting because a valid control could not be found. Even after executing all recovery behaviors");
